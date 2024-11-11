@@ -1,7 +1,47 @@
 fn hit_sphere(center: vec3f, radius: f32, r: ray, record: ptr<function, hit_record>, max: f32)
 {
+  var n = radius - center;
+  var normal = normalize(n);
+  var t = 0.0; //unit vector, therefore size is always 1.
+  let oc = r.origin - center;
 
+  let a = dot(r.direction, r.direction);
+  let b = 2.0 * dot(r.direction, oc);
+  let c = dot(oc, oc) - (radius * radius);
+  
+  let delta = (b * b) - 4.0 * a * c;
+
+
+
+  if (delta == 0)
+  {
+    t = -b + sqrt(delta) / 2.0 * a;
+
+    record.t = t;
+    record.p = ray_at(r, t);
+    record.normal = normalize(record.p - center);
+    record.hit_anything = true;
+    return;
+  }
+
+  if (delta < 0)
+  {
+    let t0 = -b + sqrt(delta) / 2.0 * a;
+    let t1 = -b - sqrt(delta) / 2.0 * a;
+    t = min(t0, t1);
+
+    record.t = t;
+    record.p = ray_at(r, t);
+    record.normal = normalize(record.p - center);
+    record.hit_anything = true;
+    return;
+  }
+
+  // no hit
+  record.hit_anything = false;
+  return;
 }
+
 
 fn hit_quad(r: ray, Q: vec4f, u: vec4f, v: vec4f, record: ptr<function, hit_record>, max: f32)
 {

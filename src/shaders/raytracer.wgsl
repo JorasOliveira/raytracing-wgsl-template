@@ -1,4 +1,4 @@
-const THREAD_COUNT = 16;
+ const THREAD_COUNT = 16;
 const RAY_TMIN = 0.0001;
 const RAY_TMAX = 100.0;
 const PI = 3.1415927f;
@@ -196,8 +196,26 @@ fn trace(r: ray, rng_state: ptr<function, u32>) -> vec3f
   var backgroundcolor2 = int_to_rgb(i32(uniforms[12]));
   var behaviour = material_behaviour(true, vec3f(0.0));
 
+  //TODO -> fix issues and finish
   for (var j = 0; j < maxbounces; j = j + 1)
   {
+    var colision = check_ray_collision(r, RAY_TMAX);
+    if (!colision.hit_anything)
+    {
+      var t = 0.5 * (r.direction.y + 1.0);
+      var backgroundcolor = mix(backgroundcolor1, backgroundcolor2, t);
+      light = light + color * backgroundcolor;
+      break;
+    }
+    //light = light + colision;
+    let hit_point = colision.p;
+    let normal = colision.normal;
+    //let ligth_contribution = colision.object_color.xyz * max(dot(normal, light, 0.0));
+    //let new_dir = trace(r_, &normal);
+    //r_ = trace(hit_point, &rng_state); // emissive color, prob wrong rn
+    light = light + color * colision.object_color.xyz;
+    color = color * colision.object_material.xyz;
+
 
   }
 
@@ -233,6 +251,13 @@ fn render(@builtin(global_invocation_id) id : vec3u)
     // 3. Call trace function
     // 4. Average the color
 
+    for(var i = 0; i < samples_per_pixel; i = i + 1)
+    {
+      var ray = get_ray(cam, uv, &rng_state);
+      color = color * trace(ray, &rng_state);
+    }
+
+    color = color / f32(samples_per_pixel);
     var color_out = vec4(linear_to_gamma(color), 1.0);
     var map_fb = mapfb(id.xy, rez);
     
