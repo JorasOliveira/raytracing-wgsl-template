@@ -2,7 +2,7 @@ fn hit_sphere(center: vec3f, radius: f32, r: ray, record: ptr<function, hit_reco
 {
   var n = radius - center;
   var normal = normalize(n);
-  var t = 0.0; //unit vector, therefore size is always 1.
+  var t = 0.0;
   let oc = r.origin - center;
 
   let a = dot(r.direction, r.direction);
@@ -11,12 +11,20 @@ fn hit_sphere(center: vec3f, radius: f32, r: ray, record: ptr<function, hit_reco
   
   let delta = (b * b) - 4.0 * a * c;
 
-
+  if (delta < 0)
+  {
+    record.hit_anything = false;
+    return;
+  }
 
   if (delta == 0)
   {
     t = -b + sqrt(delta) / 2.0 * a;
-
+    if (t < RAY_TMIN || t > max)
+    {
+      record.hit_anything = false;
+      return;
+    }
     record.t = t;
     record.p = ray_at(r, t);
     record.normal = normalize(record.p - center);
@@ -24,21 +32,20 @@ fn hit_sphere(center: vec3f, radius: f32, r: ray, record: ptr<function, hit_reco
     return;
   }
 
-  if (delta < 0)
+  let t0 = -b + sqrt(delta) / 2.0 * a;
+  let t1 = -b - sqrt(delta) / 2.0 * a;
+  t = min(t0, t1);
+
+  if (t < RAY_TMIN || t > max)
   {
-    let t0 = -b + sqrt(delta) / 2.0 * a;
-    let t1 = -b - sqrt(delta) / 2.0 * a;
-    t = min(t0, t1);
-
-    record.t = t;
-    record.p = ray_at(r, t);
-    record.normal = normalize(record.p - center);
-    record.hit_anything = true;
+    record.hit_anything = false;
     return;
   }
 
-  // no hit
-  record.hit_anything = false;
+  record.t = t;
+  record.p = ray_at(r, t);
+  record.normal = normalize(record.p - center);
+  record.hit_anything = true;
   return;
 }
 

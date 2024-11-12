@@ -162,6 +162,60 @@ fn check_ray_collision(r: ray, max: f32) -> hit_record
   var record = hit_record(RAY_TMAX, vec3f(0.0), vec3f(0.0), vec4f(0.0), vec4f(0.0), false, false);
   var closest = record;
 
+
+  for (var i = 0; i < spheresCount; i++)
+  {
+    var sphere = spheresb[i];
+    hit_sphere(sphere.transform.xyz, sphere.transform.w, r, &record, RAY_TMAX);
+    if (record.hit_anything)
+    {
+      if (record.t <= closest.t)
+      {
+        closest = record;
+      } 
+    } 
+  }
+
+  for (var i = 0; i < quadsCount; i++)
+  {
+    var quad = quadsb[i];
+    hit_quad(r, quad.Q, quad.u, quad.v, &record, RAY_TMAX);
+    if (record.hit_anything)
+    {
+      if (record.t <= closest.t)
+      {
+        closest = record;
+      } 
+    } 
+  }
+
+  
+  for (var i = 0; i < boxesCount; i++)
+  {
+    var box = boxesb[i];
+    hit_box(r, box.center.xyz, box.radius.xyz, &record, RAY_TMAX);
+    if (record.hit_anything)
+    {
+      if (record.t <= closest.t)
+      {
+        closest = record;
+      } 
+    } 
+  }
+
+  for (var i = 0; i < trianglesCount; i++)
+  {
+    var triangle = trianglesb[i];
+    hit_triangle(r, triangle.v0.xyz, triangle.v1.xyz, triangle.v2.xyz, &record, RAY_TMAX);
+    if (record.hit_anything)
+    {
+      if (record.t <= closest.t)
+      {
+        closest = record;
+      } 
+    } 
+  }
+
   return closest;
 }
 
@@ -197,26 +251,28 @@ fn trace(r: ray, rng_state: ptr<function, u32>) -> vec3f
   var behaviour = material_behaviour(true, vec3f(0.0));
 
   //TODO -> fix issues and finish
-  for (var j = 0; j < maxbounces; j = j + 1)
+  for (var j = 0; j <= maxbounces; j = j + 1)
   {
     var colision = check_ray_collision(r, RAY_TMAX);
+    light += color *  envoriment_color(r_.direction, backgroundcolor1, backgroundcolor2);
+
     if (!colision.hit_anything)
     {
-      var t = 0.5 * (r.direction.y + 1.0);
-      var backgroundcolor = mix(backgroundcolor1, backgroundcolor2, t);
-      light = light + color * backgroundcolor;
-      break;
+      continue;
     }
-    //light = light + colision;
-    let hit_point = colision.p;
-    let normal = colision.normal;
-    //let ligth_contribution = colision.object_color.xyz * max(dot(normal, light, 0.0));
-    //let new_dir = trace(r_, &normal);
-    //r_ = trace(hit_point, &rng_state); // emissive color, prob wrong rn
-    light = light + color * colision.object_color.xyz;
-    color = color * colision.object_material.xyz;
-
-
+    else
+    {
+      //TODO -> chamar a funcao do material e calculcar o novo raio com base nele
+      // lambertiana eh so aletaorio dada a normal.
+      let hit_point = colision.p;
+      let normal = colision.normal;
+      //let ligth_contribution = colision.object_color.xyz * max(dot(normal, light, 0.0));
+      //let new_dir = trace(r_, &normal);
+      // r_ = trace(hit_point, &rng_state); // emissive color, prob wrong rn
+      // light = light + color * colision.object_color.xyz;
+      //r_ = ray_at(r_, colision.t);
+      color *= colision.object_color.xyz;
+    }
   }
 
   return light;
@@ -243,7 +299,8 @@ fn render(@builtin(global_invocation_id) id : vec3u)
     var cam = get_camera(lookfrom, lookat, vec3(0.0, 1.0, 0.0), uniforms[10], 1.0, uniforms[6], uniforms[5]);
     var samples_per_pixel = i32(uniforms[4]);
 
-    var color = vec3(rng_next_float(&rng_state), rng_next_float(&rng_state), rng_next_float(&rng_state));
+    //var color = vec3(rng_next_float(&rng_state), rng_next_float(&rng_state), rng_next_float(&rng_state));
+    var color = vec3(0.0, 0.0, 0.0);
 
     // Steps:
     // 1. Loop for each sample per pixel
@@ -251,20 +308,22 @@ fn render(@builtin(global_invocation_id) id : vec3u)
     // 3. Call trace function
     // 4. Average the color
 
-    for(var i = 0; i < samples_per_pixel; i = i + 1)
+    for(var i = 0; i <= samples_per_pixel; i = i + 1)
     {
       var ray = get_ray(cam, uv, &rng_state);
-      color = color * trace(ray, &rng_state);
+      color += trace(ray, &rng_state);
     }
 
-    color = color / f32(samples_per_pixel);
+    color /= f32(samples_per_pixel);
+
     var color_out = vec4(linear_to_gamma(color), 1.0);
     var map_fb = mapfb(id.xy, rez);
     
     // 5. Accumulate the color
     var should_accumulate = uniforms[3];
+    var accumulated_color = color_out * should_accumulate + color_out; //acho que tem erro aqui tambem
 
     // Set the color to the framebuffer
-    rtfb[map_fb] = color_out;
-    fb[map_fb] = color_out;
+    rtfb[map_fb] = accumulated_color;
+    fb[map_fb] = accumulated_color/accumulated_color.w; // no ideia for proper weight value
 }
