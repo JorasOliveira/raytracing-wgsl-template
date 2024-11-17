@@ -287,7 +287,7 @@ fn trace(r: ray, rng_state: ptr<function, u32>) -> vec3f
     var absorption = colision.object_material.y;
     var specular = colision.object_material.z;
     var emission = colision.object_material.w;
-    var fuzz = 0.0;
+    var fuzz = absorption;
 
     if (emission > 0.0)
     {
@@ -298,29 +298,36 @@ fn trace(r: ray, rng_state: ptr<function, u32>) -> vec3f
     var rng_f = rng_next_float(rng_state);
     var rng_sphere = rng_next_vec3_in_unit_sphere(rng_state);
 
-    if(smoothness > 0.2)
+    if (smoothness > 0.0) //metallic material
     {
-      //metallic material
-      behaviour = metal(colision.normal, r_.direction, fuzz, rng_sphere);
-      // Recursively trace the reflected ray
-      r_ = ray(colision.p, behaviour.direction);
-      color *= colision.object_color.xyz;
+      if (specular > rng_f) //rays scatter with perfect reflection
+      {
+        behaviour = metal(colision.normal, r_.direction, fuzz, rng_sphere);
+      }
+      else  //behaves with random (lambertian) relfection
+      {
+        behaviour = lambertian(colision.normal, absorption, rng_sphere, rng_state);
+        color *= colision.object_color.xyz * (1.0 - absorption);
+      }
+    }    
+    else if(smoothness < 0.0)
+    {
+      //dielectric material
+      behaviour = dielectric(colision.normal, r_.direction, specular, colision.frontface, rng_sphere, absorption, rng_state);
+      r_ = ray(colision.p, behaviour.direction);    
     }
-    // else if(smoothness < 0.0)
-    // {
-    //   //dielectric material
-    //   behaviour = dielectric(colision.normal, r_.direction, specular, colision.frontface, rng_sphere, absorption, rng_state);
-    //   r_ = ray(colision.p, behaviour.direction);    
-    // }
     else
     {
       behaviour = lambertian(colision.normal, absorption, rng_sphere, rng_state);
       color *= colision.object_color.xyz * (1.0 - absorption);
     }
-
     r_ = ray(colision.p + colision.normal * 0.001, behaviour.direction);
-  }
+    if (!behaviour.scatter) 
+    {
+      break;
+    }
 
+  }
   return light;
 }
 
