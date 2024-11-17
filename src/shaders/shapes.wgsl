@@ -1,53 +1,39 @@
 fn hit_sphere(center: vec3f, radius: f32, r: ray, record: ptr<function, hit_record>, max: f32)
 {
-  var n = radius - center;
-  var normal = normalize(n);
-  var t = 0.0;
-  let oc = r.origin - center;
-
   let a = dot(r.direction, r.direction);
-  let b = 2.0 * dot(r.direction, oc);
-  let c = dot(oc, oc) - (radius * radius);
+  let b = dot(r.direction, r.origin - center);
+  let c = dot(r.origin - center, r.origin - center) - (radius * radius);
   
-  let delta = (b * b) - 4.0 * a * c;
+  let delta = (b * b) - (a * c);
 
-  if (delta < 0)
+  if (delta < 0.0)
   {
     record.hit_anything = false;
     return;
   }
 
-  if (delta == 0)
+  let t0 = (-b - sqrt(delta)) / a;
+  let t1 = (-b + sqrt(delta)) / a;
+  var t = t0;
+
+  if (t < 0.0 || t > max)
   {
-    t = -b + sqrt(delta) / 2.0 * a;
-    if (t < RAY_TMIN || t > max)
+    t = t1;
+    if (t < 0.0 || t > max)
     {
       record.hit_anything = false;
       return;
     }
-    record.t = t;
-    record.p = ray_at(r, t);
-    record.normal = normalize(record.p - center);
-    record.hit_anything = true;
-    return;
   }
-
-  let t0 = -b + sqrt(delta) / 2.0 * a;
-  let t1 = -b - sqrt(delta) / 2.0 * a;
-  t = min(t0, t1);
-
-  if (t < RAY_TMIN || t > max)
-  {
-    record.hit_anything = false;
-    return;
-  }
+  var intersect = ray_at(r, t);
 
   record.t = t;
-  record.p = ray_at(r, t);
-  record.normal = normalize(record.p - center);
+  record.p = intersect;
+  record.normal = normalize(intersect - center);
   record.hit_anything = true;
-  return;
 }
+
+
 
 
 fn hit_quad(r: ray, Q: vec4f, u: vec4f, v: vec4f, record: ptr<function, hit_record>, max: f32)
