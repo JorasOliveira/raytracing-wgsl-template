@@ -204,27 +204,37 @@ fn check_ray_collision(r: ray, max: f32) -> hit_record
     hit_box(r_, box.center.xyz, box.radius.xyz, &record_, ray_t);
     if (record_.hit_anything)
     {
+      ray_t = record_.t;
       record_.object_color = box.color;
       record_.object_material = box.material;
       closest = record_;
     } 
   }
 
-  // for (var i = 0; i < trianglesCount; i++)
-  // {
-  //   var triangle = trianglesb[i];
-  //   hit_triangle(r, triangle.v0.xyz, triangle.v1.xyz, triangle.v2.xyz, &record, RAY_TMAX);
-  //   if (record.hit_anything)
-  //   {
-  //     if (record.t <= closest.t)
-  //     {
-  //       record.object_color = triangle.color;
-  //       record.object_material = triangle.material;
-  //       closest = record;
-  //     } 
-  //   } 
-  // }
+  for (var i = 0; i < meshCount; i++)
+  {
+    var mesh = meshb[i];
+    var record_ = hit_record(RAY_TMAX, vec3f(0.0), vec3f(0.0), vec4f(0.0), vec4f(0.0), false, false);
 
+    if (mesh.show_bb > 0.0)
+    {
+      continue;
+    }
+      for (var j = i32(mesh.start); j < i32(mesh.end); j++)
+      {
+        var triangle = trianglesb[j];
+        var record_ = hit_record(RAY_TMAX, vec3f(0.0), vec3f(0.0), vec4f(0.0), vec4f(0.0), false, false);
+
+        hit_triangle(r_, triangle.v0.xyz, triangle.v1.xyz, triangle.v2.xyz, &record_, ray_t);
+        if (record_.hit_anything)
+        {
+          ray_t = record_.t;
+          record_.object_color = mesh.color;
+          record_.object_material = mesh.material;
+          closest = record_;
+        } 
+      }
+  }
   closest.frontface = dot(r.direction, closest.normal) < 0.0;
   closest.normal = select(-closest.normal, closest.normal, closest.frontface);
   
@@ -252,8 +262,27 @@ fn metal(normal : vec3f, direction: vec3f, fuzz: f32, random_sphere: vec3f) -> m
 }
 
 fn dielectric(normal : vec3f, r_direction: vec3f, refraction_index: f32, frontface: bool, random_sphere: vec3f, fuzz: f32, rng_state: ptr<function, u32>) -> material_behaviour
-{  
-  return material_behaviour(false, vec3f(0.0));
+{
+  let refraction_ratio = select(refraction_index, 1.0/refraction_index, frontface);
+
+  let cos_theta = min(dot(-normalize(r_direction), normal), 1.0); // Angle between ray and surface normal
+  let sin_theta = sqrt(1.0 - cos_theta * cos_theta); // Perpendicular component of angle
+
+  // Determine if total internal reflection occurs
+  let cannot_refract = (refraction_ratio * sin_theta > 1.0);
+
+  var direction: vec3f;
+  var schlick = reflectance(cos_theta, refraction_ratio);
+  var normalized_dir = normalize(r_direction);
+
+  if cannot_refract || schlick > rng_next_float(rng_state) {
+    // Total internal reflection or Fresnel reflection
+    direction = reflect(normalized_dir, normal);
+  } else {
+    // Refraction
+    direction = refract(cos_theta, normalized_dir, refraction_ratio, normal);
+  }
+  return material_behaviour(true, normalize(direction));
 }
 
 fn emmisive(color: vec3f, light: f32) -> material_behaviour
@@ -279,7 +308,8 @@ fn trace(r: ray, rng_state: ptr<function, u32>) -> vec3f
 
     if (!colision.hit_anything)
     {
-      light += color * envoriment_color(r_.direction, backgroundcolor1, backgroundcolor2);
+      color *= envoriment_color(r_.direction, backgroundcolor1, backgroundcolor2);;
+      light += color;
       break;
     }
 
@@ -287,7 +317,6 @@ fn trace(r: ray, rng_state: ptr<function, u32>) -> vec3f
     var absorption = colision.object_material.y;
     var specular = colision.object_material.z;
     var emission = colision.object_material.w;
-    var fuzz = absorption;
 
     if (emission > 0.0)
     {
@@ -297,12 +326,13 @@ fn trace(r: ray, rng_state: ptr<function, u32>) -> vec3f
     
     var rng_f = rng_next_float(rng_state);
     var rng_sphere = rng_next_vec3_in_unit_sphere(rng_state);
+    var ray_p = colision.p + colision.normal * 0.001;
 
-    if (smoothness > 0.0) //metallic material
+    if (smoothness >= 0.0) //metallic material
     {
       if (specular > rng_f) //rays scatter with perfect reflection
       {
-        behaviour = metal(colision.normal, r_.direction, fuzz, rng_sphere);
+        behaviour = metal(colision.normal, r_.direction, absorption, rng_sphere);
       }
       else  //behaves with random (lambertian) relfection
       {
@@ -313,20 +343,20 @@ fn trace(r: ray, rng_state: ptr<function, u32>) -> vec3f
     else if(smoothness < 0.0)
     {
       //dielectric material
-      behaviour = dielectric(colision.normal, r_.direction, specular, colision.frontface, rng_sphere, absorption, rng_state);
-      r_ = ray(colision.p, behaviour.direction);    
+      behaviour = dielectric(colision.normal, r_.direction, specular, colision.frontface, rng_sphere, absorption, rng_state);  
+      color *= colision.object_color.xyz * (1.0 - absorption);
+      ray_p = colision.p - colision.normal * 0.001;
     }
     else
     {
       behaviour = lambertian(colision.normal, absorption, rng_sphere, rng_state);
       color *= colision.object_color.xyz * (1.0 - absorption);
     }
-    r_ = ray(colision.p + colision.normal * 0.001, behaviour.direction);
     if (!behaviour.scatter) 
     {
       break;
     }
-
+    r_ = ray(ray_p, behaviour.direction);
   }
   return light;
 }

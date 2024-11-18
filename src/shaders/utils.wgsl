@@ -100,3 +100,29 @@ fn rotate_ray_quaternion(r: ray, center: vec3f, q: vec4f) -> ray
   var direction = rotate_vector(r.direction, q);
   return ray(origin, direction);
 }
+
+// my helper funcs:
+// Compute reflectance using Schlick's approximation
+fn reflectance(cos_theta: f32, refraction_ratio: f32) -> f32 {
+    let r0 = pow(((1.0 - refraction_ratio) / (1.0 + refraction_ratio)), 2.0);
+    return r0 + (1.0 - r0) * pow((1.0 - cos_theta), 5.0);
+}
+
+fn refract(cos_theta: f32, direction: vec3f, refraction_ratio: f32, normal: vec3f) -> vec3f {
+    // Perpendicular component of the refracted ray
+    let r_out_perpendicular = refraction_ratio * (direction + cos_theta * normal);
+
+    // Parallel component of the refracted ray
+    let parallel_component_magnitude = 1.0 - dot(r_out_perpendicular, r_out_perpendicular);
+
+    // Handle numerical precision issues in sqrt
+    var r_out_parallel = vec3f(0.0);
+    
+    if (parallel_component_magnitude > 0.0)
+    {
+      r_out_parallel = -sqrt(parallel_component_magnitude) * normal;
+    } 
+
+    // Return the sum of the perpendicular and parallel components
+    return normalize(r_out_perpendicular + r_out_parallel);
+}
